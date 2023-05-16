@@ -20,7 +20,20 @@ public class Datawallet
     public IdentityAddress Owner { get; }
     public DatawalletVersion Version { get; private set; }
     public List<DatawalletModification> Modifications { get; }
+
+    public IReadOnlyCollection<DatawalletModification> NewModifications
+    {
+        get { return _newModifications.AsReadOnly(); }
+        set { _newModifications = (List<DatawalletModification>)value; }
+    }
+    private List<DatawalletModification> _newModifications;
+
     public DatawalletModification? LatestModification => Modifications.MaxBy(m => m.Index);
+
+    public void ClearNewModifications()
+    {
+        NewModifications = new List<DatawalletModification>();
+    }
 
     public void Upgrade(DatawalletVersion targetVersion)
     {

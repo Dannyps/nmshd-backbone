@@ -1,4 +1,4 @@
-﻿using Backbone.Modules.Synchronization.Application.Infrastructure;
+﻿using Backbone.Modules.Synchronization.Application.Infrastructure.Persistence.Repository;
 using Backbone.Modules.Synchronization.Application.IntegrationEvents.Outgoing;
 using Backbone.Modules.Synchronization.Domain.Entities.Sync;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.EventBus;
@@ -9,13 +9,13 @@ namespace Backbone.Modules.Synchronization.Application.IntegrationEvents.Incomin
 
 public class MessageCreatedIntegrationEventHandler : IIntegrationEventHandler<MessageCreatedIntegrationEvent>
 {
-    private readonly ISynchronizationDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IEventBus _eventBus;
     private readonly ILogger<MessageCreatedIntegrationEventHandler> _logger;
 
-    public MessageCreatedIntegrationEventHandler(ISynchronizationDbContext dbContext, IEventBus eventBus, ILogger<MessageCreatedIntegrationEventHandler> logger)
+    public MessageCreatedIntegrationEventHandler(IUnitOfWork unitOfWork, IEventBus eventBus, ILogger<MessageCreatedIntegrationEventHandler> logger)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _eventBus = eventBus;
         _logger = logger;
     }
@@ -32,7 +32,13 @@ public class MessageCreatedIntegrationEventHandler : IIntegrationEventHandler<Me
             var payload = new { integrationEvent.Id };
             try
             {
-                var externalEvent = await _dbContext.CreateExternalEvent(IdentityAddress.Parse(recipient), ExternalEventType.MessageReceived, payload);
+                var owner = IdentityAddress.Parse(recipient);
+                var nextIndex = await _unitOfWork.ExternalEventsRepository.FindNextIndexForIdentity(owner);
+                var externalEvent = new ExternalEvent(ExternalEventType.MessageReceived, owner, nextIndex, payload);
+                _unitOfWork.ExternalEventsRepository.Add(externalEvent);
+
+                await _unitOfWork.Save(CancellationToken.None);
+
                 _eventBus.Publish(new ExternalEventCreatedIntegrationEvent(externalEvent));
             }
             catch (Exception ex)

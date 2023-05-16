@@ -1,4 +1,4 @@
-﻿using Backbone.Modules.Synchronization.Application.Infrastructure;
+﻿using Backbone.Modules.Synchronization.Application.Infrastructure.Persistence.Repository;
 using Backbone.Modules.Synchronization.Domain.Entities.Sync;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Exceptions;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.UserContext;
@@ -11,24 +11,26 @@ public class Handler : IRequestHandler<RefreshExpirationTimeOfSyncRunCommand, Re
 {
     private readonly DeviceId _activeDevice;
     private readonly IdentityAddress _activeIdentity;
-    private readonly ISynchronizationDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public Handler(ISynchronizationDbContext dbContext, IUserContext userContext)
+    public Handler(IUnitOfWork unitOfWork, IUserContext userContext)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _activeIdentity = userContext.GetAddress();
         _activeDevice = userContext.GetDeviceId();
     }
 
     public async Task<RefreshExpirationTimeOfSyncRunResponse> Handle(RefreshExpirationTimeOfSyncRunCommand request, CancellationToken cancellationToken)
     {
-        var syncRun = await _dbContext.GetSyncRun(request.SyncRunId, _activeIdentity, cancellationToken);
+        var syncRun = await _unitOfWork.SyncRunsRepository.Find(request.SyncRunId, _activeIdentity, cancellationToken);
 
         CheckPrerequisites(syncRun);
 
         syncRun.RefreshExpirationTime();
 
-        await SaveSyncRun(syncRun, cancellationToken);
+        _unitOfWork.SyncRunsRepository.Update(syncRun);
+
+        await _unitOfWork.Save(cancellationToken);
 
         return new RefreshExpirationTimeOfSyncRunResponse { ExpiresAt = syncRun.ExpiresAt };
     }
@@ -40,12 +42,5 @@ public class Handler : IRequestHandler<RefreshExpirationTimeOfSyncRunCommand, Re
 
         if (syncRun.IsFinalized)
             throw new OperationFailedException(ApplicationErrors.SyncRuns.SyncRunAlreadyFinalized());
-    }
-
-    private async Task SaveSyncRun(SyncRun syncRun, CancellationToken cancellationToken)
-    {
-        _dbContext.Set<SyncRun>().Update(syncRun);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

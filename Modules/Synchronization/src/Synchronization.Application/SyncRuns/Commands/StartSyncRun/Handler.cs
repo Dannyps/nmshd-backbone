@@ -1,6 +1,5 @@
 ﻿using AutoMapper;
-using Backbone.Modules.Synchronization.Application.Extensions;
-using Backbone.Modules.Synchronization.Application.Infrastructure;
+using Backbone.Modules.Synchronization.Application.Infrastructure.Persistence.Repository;
 using Backbone.Modules.Synchronization.Application.SyncRuns.DTOs;
 using Backbone.Modules.Synchronization.Domain.Entities;
 using Backbone.Modules.Synchronization.Domain.Entities.Sync;
@@ -8,7 +7,6 @@ using Enmeshed.BuildingBlocks.Application.Abstractions.Exceptions;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.UserContext;
 using Enmeshed.DevelopmentKit.Identity.ValueObjects;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using static Backbone.Modules.Synchronization.Domain.Entities.Datawallet;
 
 namespace Backbone.Modules.Synchronization.Application.SyncRuns.Commands.StartSyncRun;
@@ -19,8 +17,7 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
     private const int DEFAULT_DURATION = 10;
     private readonly DeviceId _activeDevice;
     private readonly IdentityAddress _activeIdentity;
-
-    private readonly ISynchronizationDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
 
     private CancellationToken _cancellationToken;
@@ -29,9 +26,9 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
     private StartSyncRunCommand _request;
     private DatawalletVersion _supportedDatawalletVersion;
 
-    public Handler(ISynchronizationDbContext dbContext, IUserContext userContext, IMapper mapper)
+    public Handler(IUnitOfWork unitOfWork, IUserContext userContext, IMapper mapper)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _mapper = mapper;
         _activeIdentity = userContext.GetAddress();
         _activeDevice = userContext.GetDeviceId();
@@ -43,7 +40,7 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
         _request = request;
         _supportedDatawalletVersion = new DatawalletVersion(_request.SupportedDatawalletVersion);
         _cancellationToken = cancellationToken;
-        _datawallet = await _dbContext.GetDatawallet(_activeIdentity, _cancellationToken);
+        _datawallet = await _unitOfWork.DatawalletsRepository.Find(_activeIdentity, _cancellationToken);
 
         return request.Type switch
         {
@@ -59,12 +56,14 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
         EnsureSufficientSupportedDatawalletVersion();
         await EnsureNoActiveSyncRunExists();
 
-        var unsyncedEvents = await _dbContext.GetUnsyncedExternalEvents(_activeIdentity, MAX_NUMBER_OF_SYNC_ERRORS_PER_EVENT, _cancellationToken);
+        var unsyncedEvents = await _unitOfWork.ExternalEventsRepository.FindUnsynced(_activeIdentity, MAX_NUMBER_OF_SYNC_ERRORS_PER_EVENT, _cancellationToken);
 
         if (unsyncedEvents.Count == 0)
             return CreateResponse(StartSyncRunStatus.NoNewEvents);
 
-        var newSyncRun = await CreateNewSyncRun(unsyncedEvents);
+        var newSyncRun = CreateNewSyncRun(unsyncedEvents);
+
+        await _unitOfWork.Save(CancellationToken.None);
 
         return CreateResponse(StartSyncRunStatus.Created, newSyncRun);
     }
@@ -74,7 +73,9 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
         EnsureSufficientSupportedDatawalletVersion();
         await EnsureNoActiveSyncRunExists();
 
-        var newSyncRun = await CreateNewSyncRun();
+        var newSyncRun = CreateNewSyncRun();
+
+        await _unitOfWork.Save(CancellationToken.None);
 
         return CreateResponse(StartSyncRunStatus.Created, newSyncRun);
     }
@@ -93,14 +94,14 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
 
     private async Task EnsureNoActiveSyncRunExists()
     {
-        _previousSyncRun = await _dbContext.GetPreviousSyncRunWithExternalEvents(_activeIdentity, _cancellationToken);
+        _previousSyncRun = await _unitOfWork.SyncRunsRepository.FindPrevious(_activeIdentity, _cancellationToken);
 
         if (IsPreviousSyncRunStillActive())
         {
             if (!_previousSyncRun.IsExpired)
                 throw new OperationFailedException(ApplicationErrors.SyncRuns.CannotStartSyncRunWhenAnotherSyncRunIsRunning(_previousSyncRun.Id));
 
-            await CancelPreviousSyncRun();
+            CancelPreviousSyncRun();
         }
     }
 
@@ -109,35 +110,23 @@ public class Handler : IRequestHandler<StartSyncRunCommand, StartSyncRunResponse
         return _previousSyncRun is { IsFinalized: false };
     }
 
-    private async Task CancelPreviousSyncRun()
+    private void CancelPreviousSyncRun()
     {
         _previousSyncRun.Cancel();
-        _dbContext.Set<SyncRun>().Update(_previousSyncRun);
-        await _dbContext.SaveChangesAsync(_cancellationToken);
+        _unitOfWork.SyncRunsRepository.Update(_previousSyncRun);
     }
 
-    private async Task<SyncRun> CreateNewSyncRun()
+    private SyncRun CreateNewSyncRun()
     {
-        return await CreateNewSyncRun(Array.Empty<ExternalEvent>());
+        return CreateNewSyncRun(Array.Empty<ExternalEvent>());
     }
 
-    private async Task<SyncRun> CreateNewSyncRun(IEnumerable<ExternalEvent> events)
+    private SyncRun CreateNewSyncRun(IEnumerable<ExternalEvent> events)
     {
         var newIndex = DetermineNextSyncRunIndex();
         var syncRun = new SyncRun(newIndex, _request.Duration ?? DEFAULT_DURATION, _activeIdentity, _activeDevice, events ?? Array.Empty<ExternalEvent>(), _mapper.Map<SyncRun.SyncRunType>(_request.Type));
 
-        await _dbContext.Set<SyncRun>().AddAsync(syncRun, _cancellationToken);
-        try
-        {
-            await _dbContext.SaveChangesAsync(_cancellationToken);
-        }
-        catch (DbUpdateException ex)
-        {
-            if (ex.HasReason(DbUpdateExceptionReason.DuplicateIndex))
-                throw new OperationFailedException(ApplicationErrors.SyncRuns.CannotStartSyncRunWhenAnotherSyncRunIsRunning());
-
-            throw;
-        }
+        _unitOfWork.SyncRunsRepository.Add(syncRun);
 
         return syncRun;
     }

@@ -1,4 +1,4 @@
-﻿using Backbone.Modules.Synchronization.Application.Infrastructure;
+﻿using Backbone.Modules.Synchronization.Application.Infrastructure.Persistence.Repository;
 using Backbone.Modules.Synchronization.Application.IntegrationEvents.Outgoing;
 using Backbone.Modules.Synchronization.Domain.Entities.Sync;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.EventBus;
@@ -8,13 +8,13 @@ namespace Backbone.Modules.Synchronization.Application.IntegrationEvents.Incomin
 
 public class RelationshipChangeCreatedIntegrationEventHandler : IIntegrationEventHandler<RelationshipChangeCreatedIntegrationEvent>
 {
-    private readonly ISynchronizationDbContext _dbContext;
     private readonly IEventBus _eventBus;
     private readonly ILogger<RelationshipChangeCreatedIntegrationEventHandler> _logger;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public RelationshipChangeCreatedIntegrationEventHandler(ISynchronizationDbContext dbContext, IEventBus eventBus, ILogger<RelationshipChangeCreatedIntegrationEventHandler> logger)
+    public RelationshipChangeCreatedIntegrationEventHandler(IUnitOfWork unitOfWork, IEventBus eventBus, ILogger<RelationshipChangeCreatedIntegrationEventHandler> logger)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _eventBus = eventBus;
         _logger = logger;
     }
@@ -29,7 +29,12 @@ public class RelationshipChangeCreatedIntegrationEventHandler : IIntegrationEven
         var payload = new { integrationEvent.RelationshipId, integrationEvent.ChangeId };
         try
         {
-            var externalEvent = await _dbContext.CreateExternalEvent(integrationEvent.ChangeRecipient, ExternalEventType.RelationshipChangeCreated, payload);
+            var nextIndex = await _unitOfWork.ExternalEventsRepository.FindNextIndexForIdentity(integrationEvent.ChangeRecipient);
+            var externalEvent = new ExternalEvent(ExternalEventType.RelationshipChangeCreated, integrationEvent.ChangeRecipient, nextIndex, payload);
+            _unitOfWork.ExternalEventsRepository.Add(externalEvent);
+
+            await _unitOfWork.Save(CancellationToken.None);
+
             _eventBus.Publish(new ExternalEventCreatedIntegrationEvent(externalEvent));
         }
         catch (Exception ex)

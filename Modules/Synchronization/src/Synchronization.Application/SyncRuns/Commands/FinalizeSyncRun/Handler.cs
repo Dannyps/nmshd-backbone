@@ -1,16 +1,14 @@
 ﻿using AutoMapper;
 using Backbone.Modules.Synchronization.Application.Datawallets.DTOs;
-using Backbone.Modules.Synchronization.Application.Infrastructure;
+using Backbone.Modules.Synchronization.Application.Infrastructure.Persistence.Repository;
 using Backbone.Modules.Synchronization.Application.IntegrationEvents.Outgoing;
 using Backbone.Modules.Synchronization.Domain.Entities;
 using Backbone.Modules.Synchronization.Domain.Entities.Sync;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Exceptions;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.EventBus;
-using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.Persistence.BlobStorage;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.UserContext;
 using Enmeshed.DevelopmentKit.Identity.ValueObjects;
 using MediatR;
-using Microsoft.Extensions.Options;
 using ApplicationException = Enmeshed.BuildingBlocks.Application.Abstractions.Exceptions.ApplicationException;
 
 namespace Backbone.Modules.Synchronization.Application.SyncRuns.Commands.FinalizeSyncRun;
@@ -19,28 +17,24 @@ public class Handler : IRequestHandler<FinalizeExternalEventSyncSyncRunCommand, 
 {
     private readonly DeviceId _activeDevice;
     private readonly IdentityAddress _activeIdentity;
-    private readonly IBlobStorage _blobStorage;
-    private readonly ISynchronizationDbContext _dbContext;
     private readonly IEventBus _eventBus;
     private readonly IMapper _mapper;
     private Datawallet _datawallet;
     private SyncRun _syncRun;
-    private readonly BlobOptions _blobOptions;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public Handler(ISynchronizationDbContext dbContext, IBlobStorage blobStorage, IOptions<BlobOptions> blobOptions, IUserContext userContext, IMapper mapper, IEventBus eventBus)
+    public Handler(IUnitOfWork unitOfWork, IUserContext userContext, IMapper mapper, IEventBus eventBus)
     {
-        _dbContext = dbContext;
-        _blobStorage = blobStorage;
+        _unitOfWork = unitOfWork;
         _mapper = mapper;
         _eventBus = eventBus;
         _activeIdentity = userContext.GetAddress();
         _activeDevice = userContext.GetDeviceId();
-        _blobOptions = blobOptions.Value;
     }
 
     public async Task<FinalizeDatawalletVersionUpgradeSyncRunResponse> Handle(FinalizeDatawalletVersionUpgradeSyncRunCommand request, CancellationToken cancellationToken)
     {
-        _syncRun = await _dbContext.GetSyncRun(request.SyncRunId, _activeIdentity, cancellationToken);
+        _syncRun = await _unitOfWork.SyncRunsRepository.Find(request.SyncRunId, _activeIdentity, cancellationToken, true);
 
         if (_syncRun.Type != SyncRun.SyncRunType.DatawalletVersionUpgrade)
             throw new ApplicationException(ApplicationErrors.SyncRuns.UnexpectedSyncRunType(SyncRun.SyncRunType.DatawalletVersionUpgrade));
@@ -48,27 +42,25 @@ public class Handler : IRequestHandler<FinalizeExternalEventSyncSyncRunCommand, 
         CheckPreconditions();
 
         _syncRun.FinalizeDatawalletVersionUpgrade();
-        _dbContext.Set<SyncRun>().Update(_syncRun);
 
-        _datawallet = await _dbContext.GetDatawalletForInsertion(_activeIdentity, cancellationToken);
+        _unitOfWork.SyncRunsRepository.Update(_syncRun);
+
+        _datawallet = await _unitOfWork.DatawalletsRepository.FindDatawalletForInsertion(_activeIdentity, cancellationToken);
+
+        var newModifications = AddModificationsToDatawallet(request.DatawalletModifications);
 
         if (_datawallet == null)
         {
             _datawallet = new Datawallet(new Datawallet.DatawalletVersion(request.NewDatawalletVersion), _activeIdentity);
-            _dbContext.Set<Datawallet>().Add(_datawallet);
+            _unitOfWork.DatawalletsRepository.Add(_datawallet);
         }
         else
         {
             _datawallet.Upgrade(new Datawallet.DatawalletVersion(request.NewDatawalletVersion));
-            _dbContext.Set<Datawallet>().Update(_datawallet);
+            _unitOfWork.DatawalletsRepository.Update(_datawallet);
         }
 
-        var newModifications = AddModificationsToDatawallet(request.DatawalletModifications);
-
-        await _blobStorage.SaveAsync();
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        PublishDatawalletModifiedIntegrationEvent();
+        await _unitOfWork.Save(cancellationToken);
 
         var response = new FinalizeDatawalletVersionUpgradeSyncRunResponse
         {
@@ -83,29 +75,27 @@ public class Handler : IRequestHandler<FinalizeExternalEventSyncSyncRunCommand, 
 
     public async Task<FinalizeExternalEventSyncSyncRunResponse> Handle(FinalizeExternalEventSyncSyncRunCommand request, CancellationToken cancellationToken)
     {
-        _syncRun = await _dbContext.GetSyncRunWithExternalEvents(request.SyncRunId, _activeIdentity, cancellationToken);
+        _syncRun = await _unitOfWork.SyncRunsRepository.Find(request.SyncRunId, _activeIdentity, cancellationToken, true);
 
         if (_syncRun.Type != SyncRun.SyncRunType.ExternalEventSync)
             throw new ApplicationException(ApplicationErrors.SyncRuns.UnexpectedSyncRunType(SyncRun.SyncRunType.ExternalEventSync));
 
         CheckPreconditions();
 
-        _datawallet = await _dbContext.GetDatawalletForInsertion(_activeIdentity, cancellationToken);
+        _datawallet = await _unitOfWork.DatawalletsRepository.FindDatawalletForInsertion(_activeIdentity, cancellationToken);
 
         if (_datawallet == null)
             throw new NotFoundException(nameof(Datawallet));
 
         var eventResults = _mapper.Map<ExternalEventResult[]>(request.ExternalEventResults);
         _syncRun.FinalizeExternalEventSync(eventResults);
-        _dbContext.Set<SyncRun>().Update(_syncRun);
+
+        _unitOfWork.SyncRunsRepository.Update(_syncRun);
 
         var newModifications = AddModificationsToDatawallet(request.DatawalletModifications);
-        _dbContext.Set<Datawallet>().Update(_datawallet);
+        _unitOfWork.DatawalletsRepository.Update(_datawallet);
 
-        await _blobStorage.SaveAsync();
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        PublishDatawalletModifiedIntegrationEvent();
+        await _unitOfWork.Save(cancellationToken);
 
         var response = new FinalizeExternalEventSyncSyncRunResponse
         {
@@ -148,11 +138,10 @@ public class Handler : IRequestHandler<FinalizeExternalEventSyncSyncRunCommand, 
                 modificationDto.EncryptedPayload,
                 _activeDevice);
 
-            if (newModification.EncryptedPayload != null)
-                _blobStorage.Add(_blobOptions.RootFolder, newModification.Id, newModification.EncryptedPayload);
-
             newModifications.Add(newModification);
         }
+
+        _datawallet.NewModifications = newModifications;
 
         return newModifications;
     }

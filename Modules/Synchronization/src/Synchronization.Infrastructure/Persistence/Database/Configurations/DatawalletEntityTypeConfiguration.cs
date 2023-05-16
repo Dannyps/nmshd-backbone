@@ -15,5 +15,7 @@ public class DatawalletEntityTypeConfiguration : IEntityTypeConfiguration<Datawa
         builder.HasMany(dw => dw.Modifications).WithOne(m => m.Datawallet);
 
         builder.Ignore(x => x.LatestModification);
+
+        builder.Ignore(x => x.NewModifications);
     }
 }

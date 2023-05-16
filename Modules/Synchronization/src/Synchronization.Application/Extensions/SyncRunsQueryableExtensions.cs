@@ -31,4 +31,9 @@ public static class SyncRunsQueryableExtensions
 
         return syncRun;
     }
+
+    public static IQueryable<SyncRun> IncludeExternalEvents(this IQueryable<SyncRun> query)
+    {
+        return query.Include(dw => dw.ExternalEvents);
+    }
 }

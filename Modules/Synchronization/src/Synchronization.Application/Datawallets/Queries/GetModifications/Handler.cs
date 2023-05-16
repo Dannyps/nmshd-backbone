@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using Backbone.Modules.Synchronization.Application.Datawallets.DTOs;
 using Backbone.Modules.Synchronization.Application.Infrastructure;
+using Backbone.Modules.Synchronization.Application.Infrastructure.Persistence.Repository;
 using Backbone.Modules.Synchronization.Domain.Entities;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Exceptions;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.Persistence.BlobStorage;
@@ -15,13 +16,13 @@ public class Handler : IRequestHandler<GetModificationsQuery, GetModificationsRe
 {
     private readonly IdentityAddress _activeIdentity;
     private readonly IBlobStorage _blobStorage;
-    private readonly ISynchronizationDbContext _dbContext;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
     private readonly BlobOptions _blobOptions;
 
-    public Handler(ISynchronizationDbContext dbContext, IMapper mapper, IUserContext userContext, IBlobStorage blobStorage, IOptions<BlobOptions> blobOptions)
+    public Handler(IUnitOfWork unitOfWork, IMapper mapper, IUserContext userContext, IBlobStorage blobStorage, IOptions<BlobOptions> blobOptions)
     {
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _mapper = mapper;
         _blobStorage = blobStorage;
         _blobOptions = blobOptions.Value;
@@ -32,12 +33,12 @@ public class Handler : IRequestHandler<GetModificationsQuery, GetModificationsRe
     {
         var supportedDatawalletVersion = new Datawallet.DatawalletVersion(request.SupportedDatawalletVersion);
 
-        var datawallet = await _dbContext.GetDatawallet(_activeIdentity, cancellationToken);
+        var datawallet = await _unitOfWork.DatawalletsRepository.Find(_activeIdentity, cancellationToken);
 
         if (supportedDatawalletVersion < (datawallet?.Version ?? 0))
             throw new OperationFailedException(ApplicationErrors.Datawallet.InsufficientSupportedDatawalletVersion());
 
-        var dbPaginationResult = await _dbContext.GetDatawalletModifications(_activeIdentity, request.LocalIndex, request.PaginationFilter);
+        var dbPaginationResult = await _unitOfWork.DatawalletsRepository.GetDatawalletModifications(_activeIdentity, request.LocalIndex, request.PaginationFilter);
 
         var dtos = _mapper.Map<IEnumerable<DatawalletModificationDTO>>(dbPaginationResult.ItemsOnPage).ToArray();
 
