@@ -1,5 +1,6 @@
 ﻿using Backbone.Modules.Synchronization.Application.Infrastructure;
 using Backbone.Modules.Synchronization.Domain.Entities;
+using Backbone.Modules.Synchronization.Infrastructure.Persistence.Database;
 using Enmeshed.BuildingBlocks.Application.Abstractions.Infrastructure.Persistence.BlobStorage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -10,9 +11,9 @@ public class DataSource : IDataSource
 {
     private readonly IBlobStorage _blobStorage;
     private readonly BlobOptions _blobOptions;
-    private readonly ISynchronizationDbContext _dbContext;
+    private readonly SynchronizationDbContext _dbContext;
 
-    public DataSource(IBlobStorage blobStorage, IOptions<BlobOptions> blobOptions, ISynchronizationDbContext dbContext)
+    public DataSource(IBlobStorage blobStorage, IOptions<BlobOptions> blobOptions, SynchronizationDbContext dbContext)
     {
         _blobStorage = blobStorage;
         _blobOptions = blobOptions.Value;

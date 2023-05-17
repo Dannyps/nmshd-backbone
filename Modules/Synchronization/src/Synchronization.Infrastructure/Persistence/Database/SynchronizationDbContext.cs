@@ -18,7 +18,7 @@ using NpgsqlTypes;
 
 namespace Backbone.Modules.Synchronization.Infrastructure.Persistence.Database;
 
-public class SynchronizationDbContext : AbstractDbContextBase, ISynchronizationDbContext
+public class SynchronizationDbContext : AbstractDbContextBase
 {
     public SynchronizationDbContext() { }
 

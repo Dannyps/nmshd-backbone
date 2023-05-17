@@ -1,5 +1,4 @@
-﻿using Backbone.Modules.Synchronization.Application.Infrastructure;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Backbone.Modules.Synchronization.Infrastructure.Persistence.Database;
@@ -48,8 +47,6 @@ public static class IServiceCollectionExtensions
                 throw new Exception($"Unsupported database provider: {options.Provider}");
 
         }
-
-        services.AddScoped<ISynchronizationDbContext, SynchronizationDbContext>();
     }
 }
 
