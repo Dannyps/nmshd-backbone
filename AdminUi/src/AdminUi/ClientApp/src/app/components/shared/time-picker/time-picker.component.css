@@ -1,3 +1,7 @@
 :host ::ng-deep .mat-mdc-text-field-wrapper {
     width: 75px
 }
+
+.hours{
+    margin-right: 1em;
+}
