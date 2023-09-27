@@ -51,6 +51,7 @@ import { LoggerWriterService } from "./services/logger-writer-service/logger-wri
 import { SidebarService } from "./services/sidebar-service/sidebar.service";
 import { ApiKeyInterceptor } from "./shared/interceptors/api-key.interceptor";
 import { XSRFInterceptor } from "./shared/interceptors/xsrf.interceptor";
+import { TimePickerComponent } from "./components/shared/time-picker/time-picker.component";
 
 @NgModule({
     declarations: [
@@ -68,7 +69,8 @@ import { XSRFInterceptor } from "./shared/interceptors/xsrf.interceptor";
         AssignQuotasDialogComponent,
         ConfirmationDialogComponent,
         LoginComponent,
-        ChangeSecretDialogComponent
+        ChangeSecretDialogComponent,
+        TimePickerComponent,
     ],
     imports: [
         FormsModule,

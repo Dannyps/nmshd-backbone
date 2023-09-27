@@ -1,0 +1,16 @@
+<div>
+    <mat-form-field class="hour-dropdown">
+        <mat-label>Hour</mat-label>
+        <mat-select [(value)]="hour">
+            <mat-option></mat-option>
+            <mat-option [value]="i" *ngFor="let i of hours">{{ i }}</mat-option>
+        </mat-select>
+    </mat-form-field>
+    <mat-form-field>
+        <mat-label>Minute</mat-label>
+        <mat-select [(value)]="minute">
+            <mat-option></mat-option>
+            <mat-option [value]="i" *ngFor="let i of minutes">{{ i }}</mat-option>
+        </mat-select>
+    </mat-form-field>
+</div>
