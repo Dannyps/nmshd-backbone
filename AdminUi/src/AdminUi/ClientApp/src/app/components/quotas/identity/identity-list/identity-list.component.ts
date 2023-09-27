@@ -83,4 +83,9 @@ export class IdentityListComponent {
     public async goToTier(tierId: string): Promise<void> {
         await this.router.navigate([`/tiers/${tierId}`]);
     }
+
+    public parentHandlerForTimePicker($event: number[]): void {
+        const [hour, minute] = $event;
+        console.log(hour, minute);
+    }
 }

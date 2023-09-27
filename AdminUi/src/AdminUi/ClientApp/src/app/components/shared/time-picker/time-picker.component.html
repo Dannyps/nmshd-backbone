@@ -1,10 +1,10 @@
 <div>
-    <mat-form-field>
-        <mat-label>Hours</mat-label>
-        <input matInput type="number" min="0" max="23" [(ngModel)]="hour">
-      </mat-form-field>
-      <mat-form-field>
-        <mat-label>Minutes</mat-label>
-        <input matInput type="number" min="0" max="59" [(ngModel)]="minute">
-      </mat-form-field>
+  <mat-form-field>
+    <mat-label>Hours</mat-label>
+    <input matInput type="number" min="0" max="23" [(ngModel)]="hour" (ngModelChange)="inputChanged()">
+  </mat-form-field>
+  <mat-form-field>
+    <mat-label>Minutes</mat-label>
+    <input matInput type="number" min="0" max="59" [(ngModel)]="minute" (ngModelChange)="inputChanged()">
+  </mat-form-field>
 </div>
