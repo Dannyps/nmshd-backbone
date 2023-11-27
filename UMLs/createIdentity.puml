@@ -8,14 +8,16 @@ participant UpdateDeviceRegistration as h_udr order 22
 participant PushDatawalletModifications as h_pdwm order 23
 participant CreateFile as h_cfc order 24
 participant CreateChallenge as h_ccc order 25
+participant CreateToken as h_ctc order 25
 
 database IdentitiesRepository as d_id order 100
 database PnsRegistrationRepository as d_pnsr order 100
 database FilesRepository as d_fr order 100
+database TokensRepository as d_tr order 100
 database SyncronizationDbContext as d_sync order 100 #aa5555 
 database BlobStorage as bs order 120 #5555aa
 
-autoactivate off
+autoactivate on
 
 loop __x__ in 1, 2, 3
 
@@ -45,7 +47,7 @@ loop __x__ in 1, 2, 3
     h_pdwm <-[#red]- bs : Saved blob
     h_pdwm -> d_sync    : Save modification(s) to Database 
     h_pdwm <-- d_sync   : Saved 
-    h_pdwm -> to        : Pushed
+    h_pdwm --> to        : Pushed
     note right: missing SyncErrors and ExternalEvents
     
     to -> h_cfc        : **CreateFileCommand** for Identity__x__ with CypherHash c
@@ -53,12 +55,17 @@ loop __x__ in 1, 2, 3
     h_cfc <-[#red]- bs : Saved blob
     h_cfc -> d_fr      : Save FileMetadata to Database 
     h_cfc <-- d_fr     : Saved 
-    h_cfc -> to        : Created
+    h_cfc --> to        : Created
 
     to -> h_ccc        : **CreateChallengeCommand** for Identity__x__ with CypherHash c
     h_ccc -> d_fr      : Save Challenge to Database 
     h_ccc <-- d_fr     : Saved
-    h_ccc -> to        : Created
+    h_ccc --> to        : Created
+
+    to -> h_ctc        : **CreateTokenCommand** for Identity__x__
+    h_ctc -> d_tr      : Save Token to Database 
+    h_ctc <-- d_tr     : Saved
+    h_ctc --> to        : Created
     
 end
 @enduml
