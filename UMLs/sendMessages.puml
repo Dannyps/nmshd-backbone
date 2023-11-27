@@ -1,0 +1,28 @@
+@startuml Send Messages
+
+actor Identity2 as i2 order 1
+
+actor Identity1 as i1 order 3 #red
+
+actor Identity3 as i3 order 5
+
+participant Message1 as m1 order 10
+participant Message2 as m2 order 10
+
+activate m1
+i1 -> m1            : Create Message
+note right: Identity1 as sender.
+i1 <-- m1
+deactivate m1
+i1 -> i2            : Send message
+i2 --> i1           : Accept
+
+activate m2
+i3 -> m2         : Create Message
+note right: Identity1 as recipient.
+i3 <-- m2
+deactivate m2
+i3 -> i1            : Send message
+i1 --> i3          : Accept
+
+@enduml

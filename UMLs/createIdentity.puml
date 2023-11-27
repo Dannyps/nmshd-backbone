@@ -1,0 +1,64 @@
+@startuml Identity Creation
+participant "Test Orchestrator" as to order 1
+
+participant CreateClient as h_cc order 20
+participant CreateQuota as h_cq order 20
+participant CreateIdentity as h_ci order 21
+participant UpdateDeviceRegistration as h_udr order 22
+participant PushDatawalletModifications as h_pdwm order 23
+participant CreateFile as h_cfc order 24
+participant CreateChallenge as h_ccc order 25
+
+database IdentitiesRepository as d_id order 100
+database PnsRegistrationRepository as d_pnsr order 100
+database FilesRepository as d_fr order 100
+database SyncronizationDbContext as d_sync order 100 #aa5555 
+database BlobStorage as bs order 120 #5555aa
+
+autoactivate off
+
+loop __x__ in 1, 2, 3
+
+    to -> h_cc          : **CreateClientCommand** for Client__x__
+    h_cc -> d_id        : Create Client
+    h_cc <-- d_id       : Created
+    to <-- h_cc         : **CreateClientResponse** for Client__x__
+
+    to -> h_cq          : **CreateQuotaCommand** for Client__x__
+    h_cq -> d_id        : Create Quota
+    h_cq <-- d_id       : Created
+    to <-- h_cq         : Created
+
+    to -> h_ci          : **CreateIdentityCommand** for Identity__x__
+    h_ci -> d_id        : Create Identity/User
+    h_ci <-- d_id       : Create Identityd
+    to <-- h_ci         : **CreateIdentityReponse** for Identity__x__
+    
+    to -> h_udr         : **UpdateDeviceRegistrationCommand** for logged in user.
+    h_udr -> d_pnsr     : Create PnsRegistration
+    h_udr <-- d_pnsr    : Created
+    to <-- h_udr        : Updated
+    
+    to -> h_pdwm        : **PushDatawalletModificationsCommand** for Identity__x__.Devices[0]
+    note left           : with one modification
+    h_pdwm -[#red]> bs  : Save modification(s) as a blob
+    h_pdwm <-[#red]- bs : Saved blob
+    h_pdwm -> d_sync    : Save modification(s) to Database 
+    h_pdwm <-- d_sync   : Saved 
+    h_pdwm -> to        : Pushed
+    note right: missing SyncErrors and ExternalEvents
+    
+    to -> h_cfc        : **CreateFileCommand** for Identity__x__ with CypherHash c
+    h_cfc -> bs        : Save FileContent as a blob
+    h_cfc <-[#red]- bs : Saved blob
+    h_cfc -> d_fr      : Save FileMetadata to Database 
+    h_cfc <-- d_fr     : Saved 
+    h_cfc -> to        : Created
+
+    to -> h_ccc        : **CreateChallengeCommand** for Identity__x__ with CypherHash c
+    h_ccc -> d_fr      : Save Challenge to Database 
+    h_ccc <-- d_fr     : Saved
+    h_ccc -> to        : Created
+    
+end
+@enduml

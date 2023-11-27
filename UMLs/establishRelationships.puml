@@ -1,0 +1,36 @@
+@startuml Relationships
+
+autoactivate on
+actor Identity1 as i1 order 1 #red
+participant RelationshipService as sr order 10
+
+actor Identity2 as i2 order 5
+actor Identity3 as i3 order 5
+
+== Create Relationship Templates ==
+
+i1 -> sr    : Create Relationship template
+sr --> i1   : Created Template 1
+
+i2 -> sr    : Create Relationship template
+sr --> i2   : Created Template 2
+
+== Create Relationships ==
+
+i1 -> i2    : Create relationship to Identity2 with Template 1
+i2 -> sr    : Process **Accept**
+sr --> i2   : Processed
+i2 --> i1   : Accept
+
+i1 -> i3    : Create relationship to Identity3 with Template 1
+i3 -> sr    : Process **Accept**
+sr --> i3   : Processed
+i3 --> i1   : Accept
+
+i2 -> i3    : Create relationship to Identity3 with Template 2
+i3 -> sr    : Process **Accept**
+sr --> i3   : Processed
+i3 --> i2   : Accept
+
+
+@enduml
