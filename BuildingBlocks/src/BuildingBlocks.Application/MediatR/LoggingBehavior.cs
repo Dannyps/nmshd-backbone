@@ -35,7 +35,7 @@ public class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, 
         _watch!.Stop();
 
         _logger.HandledMediatorRequest(
-            _watch.ElapsedMilliseconds > 1000 ? LogLevel.Warning : LogLevel.Information,
+            _watch.ElapsedMilliseconds > 5000 ? LogLevel.Warning : LogLevel.Information,
             typeof(TRequest).Name, _watch.ElapsedMilliseconds);
     }
 }
