@@ -102,6 +102,7 @@ public class EventBusRabbitMq : IEventBus, IDisposable
                 body);
 
             _logger.PublishedIntegrationEvent(@event.IntegrationEventId);
+            channel.Close();
         });
     }
 
