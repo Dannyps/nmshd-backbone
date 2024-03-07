@@ -27,6 +27,7 @@ public class EventBusRabbitMq : IEventBus, IDisposable
     private readonly IEventBusSubscriptionsManager _subsManager;
 
     private IModel _consumerChannel;
+    private IModel? _publishChannel;
     private readonly string? _queueName;
     private EventingBasicConsumer? _consumer;
 
@@ -65,6 +66,11 @@ public class EventBusRabbitMq : IEventBus, IDisposable
     {
         if (!_persistentConnection.IsConnected) _persistentConnection.TryConnect();
 
+        if (_publishChannel is null || _publishChannel.IsClosed)
+        {
+            _publishChannel = CreatePublishChannel();
+        }
+
         var policy = Policy.Handle<BrokerUnreachableException>()
             .Or<SocketException>()
             .WaitAndRetry(_connectionRetryCount,
@@ -75,7 +81,7 @@ public class EventBusRabbitMq : IEventBus, IDisposable
 
         _logger.LogInformation("Creating RabbitMQ channel to publish event: '{EventId}' ({EventName})", @event.IntegrationEventId, eventName);
 
-        _persistentConnection.CreateModel().ExchangeDeclare(BROKER_NAME, "direct");
+        //_persistentConnection.CreateModel().ExchangeDeclare(BROKER_NAME, "direct");
 
         _logger.LogInformation("Declaring RabbitMQ exchange to publish event: '{EventId}'", @event.IntegrationEventId);
 
@@ -90,20 +96,25 @@ public class EventBusRabbitMq : IEventBus, IDisposable
         {
             _logger.LogDebug("Publishing event to RabbitMQ: '{EventId}'", @event.IntegrationEventId);
 
-            using var channel = _persistentConnection.CreateModel();
-            var properties = channel.CreateBasicProperties();
+            var properties = _publishChannel.CreateBasicProperties();
             properties.DeliveryMode = 2; // persistent
             properties.MessageId = @event.IntegrationEventId;
 
-            channel.BasicPublish(BROKER_NAME,
-                eventName,
-                true,
-                properties,
-                body);
+            _publishChannel.BasicPublish(BROKER_NAME,
+            eventName,
+            true,
+            properties,
+            body);
 
             _logger.PublishedIntegrationEvent(@event.IntegrationEventId);
-            channel.Close();
         });
+    }
+
+    private IModel CreatePublishChannel()
+    {
+        var channel = _persistentConnection.CreateModel();
+
+        return channel;
     }
 
     public void Subscribe<T, TH>()
