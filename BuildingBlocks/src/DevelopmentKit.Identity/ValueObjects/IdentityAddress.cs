@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Backbone.BuildingBlocks.Domain;
+using Backbone.Tooling;
 using SimpleBase;
 
 namespace Backbone.DevelopmentKit.Identity.ValueObjects;
@@ -11,7 +12,7 @@ namespace Backbone.DevelopmentKit.Identity.ValueObjects;
 [TypeConverter(typeof(IdentityAddressTypeConverter))]
 public class IdentityAddress : IFormattable, IEquatable<IdentityAddress>, IComparable<IdentityAddress>
 {
-    public const int MAX_LENGTH = 36;
+    public const int MAX_LENGTH = 102;
 
     private IdentityAddress(string stringValue)
     {
@@ -63,13 +64,20 @@ public class IdentityAddress : IFormattable, IEquatable<IdentityAddress>, ICompa
 
     public static IdentityAddress Create(byte[] publicKey, string realm)
     {
-        var hashedPublicKey = SHA256.Create().ComputeHash(SHA512.Create().ComputeHash(publicKey))[..20];
+        var hashedPublicKey = SHA256.Create().ComputeHash(SHA512.Create().ComputeHash(publicKey));
+        var hashedPublicKey2 = SHA256.Create().ComputeHash(hashedPublicKey);
         var realmBytes = Encoding.UTF8.GetBytes(realm);
         var checksum = CalculateChecksum(realmBytes, hashedPublicKey);
-        var concatenation = hashedPublicKey.Concat(checksum).ToArray();
-        var address = realm + Base58.Bitcoin.Encode(concatenation);
+        var concatenation = hashedPublicKey.Concat(checksum).Concat(hashedPublicKey2).ToArray();
+        var address = realm + Base58.Bitcoin.Encode(concatenation) + SystemTime.UtcNow.Millisecond + SystemTime.UtcNow.Microsecond;
 
-        return new IdentityAddress(address);
+        var upper = 100;
+        if (address.Length < 100)
+        {
+            upper = address.Length;
+        }
+
+        return new IdentityAddress(address[..upper]);
     }
 
     private static byte[] CalculateChecksum(byte[] realmBytes, byte[] hashedPublicKey)
