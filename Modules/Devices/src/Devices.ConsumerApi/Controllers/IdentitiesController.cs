@@ -100,6 +100,7 @@ public class IdentitiesController : ApiControllerBase
     [HttpPut("Self/DeletionProcesses/{id}/Cancel")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesError(StatusCodes.Status404NotFound)]
+    [AllowAnonymous]
     public async Task<IActionResult> CancelDeletionProcess([FromRoute] string id, CancellationToken cancellationToken)
     {
         var response = await _mediator.Send(new CancelDeletionProcessCommand(id), cancellationToken);

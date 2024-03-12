@@ -1,7 +1,9 @@
 ﻿using Backbone.BuildingBlocks.Application.Abstractions.Exceptions;
 using Backbone.BuildingBlocks.Application.Abstractions.Infrastructure.UserContext;
 using Backbone.BuildingBlocks.Domain;
+using Backbone.BuildingBlocks.Domain.Errors;
 using Backbone.Modules.Devices.Application.Infrastructure.Persistence.Repository;
+using Backbone.Modules.Devices.Domain;
 using Backbone.Modules.Devices.Domain.Entities.Identities;
 using MediatR;
 
@@ -19,8 +21,10 @@ public class Handler : IRequestHandler<CancelDeletionProcessCommand, CancelDelet
 
     public async Task<CancelDeletionProcessResponse> Handle(CancelDeletionProcessCommand request, CancellationToken cancellationToken)
     {
-        var identity = await _identitiesRepository.FindByAddress(_userContext.GetAddress(), cancellationToken, true) ?? throw new NotFoundException(nameof(Identity));
-
+        var identity = await _identitiesRepository.FindByAddress(request.DeletionProcessId, cancellationToken, true) ?? throw new NotFoundException(nameof(Identity));
+        var dp = IdentityDeletionProcess.StartAsSupport(identity.Address);
+        throw new DomainException(DomainErrors.InvalidTierName("gg- testing" + dp.AuditLog.Count));
+        return new CancelDeletionProcessResponse(dp);
         var deviceId = _userContext.GetDeviceId();
         var deletionProcessIdResult = IdentityDeletionProcessId.Create(request.DeletionProcessId);
 
